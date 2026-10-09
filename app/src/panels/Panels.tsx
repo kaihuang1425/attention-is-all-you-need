@@ -9,7 +9,7 @@ import {
   type RankMode,
 } from '../data/derive';
 import { useUi } from '../state';
-import { laneWord, pct, RESULT_TEXT, secs, signed, yd } from './format';
+import { laneWord, pct, RESULT_TEXT, secs, signed } from './format';
 import { whyEpa } from './why';
 
 const MODES: { mode: RankMode; label: string; title: string }[] = [
@@ -57,11 +57,33 @@ export function PassOptionsPanel({ view }: { view: PlayView }) {
           <h2 id="po-h">Decision options</h2>
           <p className="sub">{`Illustrative model estimates ${note}`}</p>
         </div>
-        <label className="rank-select">Rank by <select aria-label="Rank pass options by" value={state.rankMode} onChange={(e) => dispatch({ type: 'rankMode', mode: e.target.value as RankMode })}>{MODES.map((m) => <option key={m.mode} value={m.mode} title={m.title}>{m.label}</option>)}</select></label>
+        <label className="rank-select">
+          Rank by{' '}
+          <select
+            aria-label="Rank pass options by"
+            value={state.rankMode}
+            onChange={(e) => dispatch({ type: 'rankMode', mode: e.target.value as RankMode })}
+          >
+            {MODES.map((m) => (
+              <option key={m.mode} value={m.mode} title={m.title}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </header>
       {idx == null && <p className="empty">Options appear from the snap (0.0 s).</p>}
       {illegal && <p className="empty">Forward pass no longer legal (QB past the LOS).</p>}
-      <div className="option-columns" aria-hidden="true"><span>Option</span><span>Catch</span><span>{state.rankMode === 'epa' ? 'Exp EPA' : state.rankMode === 'value' ? 'Exp yd' : 'Safe'}</span><span>INT</span><span>Arrival margin</span><span>1st down</span></div>
+      <div className="option-columns" aria-hidden="true">
+        <span>Option</span>
+        <span>Catch</span>
+        <span>
+          {state.rankMode === 'epa' ? 'Exp EPA' : state.rankMode === 'value' ? 'Exp yd' : 'Safe'}
+        </span>
+        <span>INT</span>
+        <span>Arrival margin</span>
+        <span>1st down</span>
+      </div>
       <ol className="option-list option-table">
         {rows.map((r) => {
           const sel = r.id === state.selectedId;
@@ -74,22 +96,48 @@ export function PassOptionsPanel({ view }: { view: PlayView }) {
                 onMouseLeave={() => dispatch({ type: 'hover', id: null })}
                 aria-pressed={sel}
               >
-                <span className="option-name"><b>{`#${r.jersey} ${lastName(r.name)}`}</b>{r.rank === 1 && <small className="chip chip-pick">Top pass</small>}</span>
+                <span className="option-name">
+                  <b>{`#${r.jersey} ${lastName(r.name)}`}</b>
+                  {r.rank === 1 && <small className="chip chip-pick">Top pass</small>}
+                </span>
                 <span className="option-num">{pct(r.catchPct)}</span>
-                <span className="option-num option-epa">{score(r)}<small>{unit}</small></span>
+                <span className="option-num option-epa">
+                  {score(r)}
+                  <small>{unit}</small>
+                </span>
                 <span className="option-num">{pct((r.pInt ?? 0) * 100, 1)}</span>
-                <span className="option-arrival"><small>{`Ball ${secs(r.tBall)} / Def ${secs(r.tDef)}`}</small><b className={(r.margin ?? 0) >= 0 ? 'pos' : 'neg'}>{`${signed(r.margin)} s`}</b></span>
-                <span className="option-down">{r.touchdown ? 'TD if caught' : r.firstDown ? `✓ ${view.data.meta.firstDownLabel}` : `${(r.yardsShort ?? 0).toFixed(0)} yd short`}</span>
+                <span className="option-arrival">
+                  <small>{`Ball ${secs(r.tBall)} / Def ${secs(r.tDef)}`}</small>
+                  <b className={(r.margin ?? 0) >= 0 ? 'pos' : 'neg'}>{`${signed(r.margin)} s`}</b>
+                </span>
+                <span className="option-down">
+                  {r.touchdown
+                    ? 'TD if caught'
+                    : r.firstDown
+                      ? `✓ ${view.data.meta.firstDownLabel}`
+                      : `${(r.yardsShort ?? 0).toFixed(0)} yd short`}
+                </span>
               </button>
             </li>
           );
         })}
       </ol>
       <div className="nonpass-note">
-        <b>Non-pass options <small>· unscored</small></b>
-        <div><span>Scramble</span><span>Not modelled</span></div>
-        <div><span>Throw away</span><span>Not modelled</span></div>
-        <div><span>Hold</span><span>See pocket pressure below</span></div>
+        <b>
+          Non-pass options <small>· unscored</small>
+        </b>
+        <div>
+          <span>Scramble</span>
+          <span>Not modelled</span>
+        </div>
+        <div>
+          <span>Throw away</span>
+          <span>Not modelled</span>
+        </div>
+        <div>
+          <span>Hold</span>
+          <span>See pocket pressure below</span>
+        </div>
       </div>
     </section>
   );
@@ -108,10 +156,8 @@ export function SelectedPanel({ view }: { view: PlayView }) {
   const fallback = rows[0]?.id ?? null;
   const id = state.selectedId ?? fallback;
   const p = id != null ? view.byId.get(id) : undefined;
-  const whyRows = id == null ? rows : [
-    ...rows.filter((r) => r.id === id),
-    ...rows.filter((r) => r.id !== id),
-  ];
+  const whyRows =
+    id == null ? rows : [...rows.filter((r) => r.id === id), ...rows.filter((r) => r.id !== id)];
   const why = idx == null || !rows.some((r) => r.id === id) ? '' : whyEpa(whyRows);
 
   if (!p) {

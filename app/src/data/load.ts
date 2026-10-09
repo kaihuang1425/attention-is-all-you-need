@@ -12,9 +12,13 @@ export async function fetchIndex(): Promise<PlayIndex> {
 
 export async function fetchAggregate(): Promise<AggregateData> {
   const r = await fetch(`${BASE}aggregate.json`);
-  if (!r.ok) throw new Error(`aggregate.json: HTTP ${r.status}. Run \`python -m pipeline.aggregate\` first.`);
+  if (!r.ok)
+    throw new Error(
+      `aggregate.json: HTTP ${r.status}. Run \`python -m pipeline.aggregate\` first.`,
+    );
   const data = (await r.json()) as AggregateData;
-  if (data.version !== 1) throw new Error(`aggregate.json: unsupported schema version ${data.version}`);
+  if (data.version !== 1)
+    throw new Error(`aggregate.json: unsupported schema version ${data.version}`);
   return data;
 }
 

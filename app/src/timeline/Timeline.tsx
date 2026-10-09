@@ -383,12 +383,23 @@ export default function Timeline({ view }: { view: PlayView }) {
   );
 }
 
-function OptionValueChart({ view, width, xOfIdx }: { view: PlayView; width: number; xOfIdx: (i: number) => number }) {
+function OptionValueChart({
+  view,
+  width,
+  xOfIdx,
+}: {
+  view: PlayView;
+  width: number;
+  xOfIdx: (i: number) => number;
+}) {
   const { state } = useUi();
   const [open, setOpen] = useState(true);
   const end = view.endIdx;
   const start = view.snapIdx;
-  const values = view.data.model.ev.slice(start, end + 1).flat().filter((v): v is number => v != null && Number.isFinite(v));
+  const values = view.data.model.ev
+    .slice(start, end + 1)
+    .flat()
+    .filter((v): v is number => v != null && Number.isFinite(v));
   const lo = Math.min(-0.5, ...values);
   const hi = Math.max(0.5, ...values);
   const height = 150;
@@ -398,7 +409,11 @@ function OptionValueChart({ view, width, xOfIdx }: { view: PlayView; width: numb
   const target = view.data.result.targetId;
   const i = Math.max(start, Math.min(end, Math.round(state.frame)));
   const current = view.data.model.ev[i];
-  const bestK = current?.reduce<number>((best, v, k) => v != null && (current[best] == null || v > current[best]!) ? k : best, 0) ?? 0;
+  const bestK =
+    current?.reduce<number>(
+      (best, v, k) => (v != null && (current[best] == null || v > current[best]!) ? k : best),
+      0,
+    ) ?? 0;
   const best = view.data.model.receivers[bestK];
   const pathFor = (k: number) => {
     const points: string[] = [];
@@ -408,23 +423,92 @@ function OptionValueChart({ view, width, xOfIdx }: { view: PlayView; width: numb
     }
     return points.join(' ');
   };
-  return <div className="value-chart-wrap">
-    <div className="value-chart-head">
-      <button className="link-btn" onClick={() => setOpen((v) => !v)} aria-expanded={open}>{open ? '▾' : '▸'} Expected pass EPA over time</button>
-      <span>Model estimate · <i className="value-key value-key-best"/> best now · <i className="value-key value-key-actual"/> actual target · grey other options</span>
+  return (
+    <div className="value-chart-wrap">
+      <div className="value-chart-head">
+        <button className="link-btn" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+          {open ? '▾' : '▸'} Expected pass EPA over time
+        </button>
+        <span>
+          Model estimate · <i className="value-key value-key-best" /> best now ·{' '}
+          <i className="value-key value-key-actual" /> actual target · grey other options
+        </span>
+      </div>
+      {open && (
+        <div className="tl-grid value-chart-grid">
+          <div className="tl-label value-axis-label">
+            Expected
+            <br />
+            EPA
+          </div>
+          <svg
+            className="value-chart"
+            width={width}
+            height={height}
+            role="img"
+            aria-label="Expected pass EPA for each receiver from snap to end event"
+          >
+            {[lo, 0, hi].map((v) => (
+              <g key={v}>
+                <line
+                  x1={xOfIdx(start)}
+                  x2={xOfIdx(end)}
+                  y1={yOf(v)}
+                  y2={yOf(v)}
+                  className="value-grid"
+                />
+                <text x={xOfIdx(start) - 3} y={yOf(v) + 3} textAnchor="end" className="value-tick">
+                  {v.toFixed(1)}
+                </text>
+              </g>
+            ))}
+            {view.data.model.receivers.map((id, k) => (
+              <polyline
+                key={id}
+                points={pathFor(k)}
+                className={`value-line${id === target ? ' value-actual' : ''}${id === best ? ' value-best' : ''}`}
+              >
+                <title>{`#${view.byId.get(id)?.jersey} ${lastName(view.byId.get(id)?.name ?? '')}`}</title>
+              </polyline>
+            ))}
+            {view.throwIdx != null && (
+              <line
+                x1={xOfIdx(view.throwIdx)}
+                x2={xOfIdx(view.throwIdx)}
+                y1={top}
+                y2={bottom}
+                className="value-throw"
+              />
+            )}
+            <line
+              x1={xOfIdx(state.frame)}
+              x2={xOfIdx(state.frame)}
+              y1={top}
+              y2={bottom}
+              className="value-head"
+            />
+            {view.data.model.receivers.map((id, k) => {
+              const v = current?.[k];
+              return v == null ? null : (
+                <circle
+                  key={id}
+                  cx={xOfIdx(i)}
+                  cy={yOf(v)}
+                  r={id === best || id === target ? 4 : 2.5}
+                  className={`value-point${id === target ? ' value-actual' : ''}${id === best ? ' value-best' : ''}`}
+                >
+                  <title>{`#${view.byId.get(id)?.jersey}: ${v >= 0 ? '+' : ''}${v.toFixed(2)} EPA at ${view.data.frames.t[i].toFixed(1)} s`}</title>
+                </circle>
+              );
+            })}
+            <text x={xOfIdx(end)} y={height - 5} textAnchor="end" className="value-tick">
+              {view.data.meta.endType === 'throw' ? 'Release' : 'End event'}
+            </text>
+          </svg>
+        </div>
+      )}
     </div>
-    {open && <div className="tl-grid value-chart-grid"><div className="tl-label value-axis-label">Expected<br/>EPA</div><svg className="value-chart" width={width} height={height} role="img" aria-label="Expected pass EPA for each receiver from snap to end event">
-      {[lo, 0, hi].map((v) => <g key={v}><line x1={xOfIdx(start)} x2={xOfIdx(end)} y1={yOf(v)} y2={yOf(v)} className="value-grid"/><text x={xOfIdx(start) - 3} y={yOf(v) + 3} textAnchor="end" className="value-tick">{v.toFixed(1)}</text></g>)}
-      {view.data.model.receivers.map((id, k) => <polyline key={id} points={pathFor(k)} className={`value-line${id === target ? ' value-actual' : ''}${id === best ? ' value-best' : ''}`}><title>{`#${view.byId.get(id)?.jersey} ${lastName(view.byId.get(id)?.name ?? '')}`}</title></polyline>)}
-      {view.throwIdx != null && <line x1={xOfIdx(view.throwIdx)} x2={xOfIdx(view.throwIdx)} y1={top} y2={bottom} className="value-throw"/>}
-      <line x1={xOfIdx(state.frame)} x2={xOfIdx(state.frame)} y1={top} y2={bottom} className="value-head"/>
-      {view.data.model.receivers.map((id, k) => {
-        const v = current?.[k];
-        return v == null ? null : <circle key={id} cx={xOfIdx(i)} cy={yOf(v)} r={id === best || id === target ? 4 : 2.5} className={`value-point${id === target ? ' value-actual' : ''}${id === best ? ' value-best' : ''}`}><title>{`#${view.byId.get(id)?.jersey}: ${v >= 0 ? '+' : ''}${v.toFixed(2)} EPA at ${view.data.frames.t[i].toFixed(1)} s`}</title></circle>;
-      })}
-      <text x={xOfIdx(end)} y={height - 5} textAnchor="end" className="value-tick">{view.data.meta.endType === 'throw' ? 'Release' : 'End event'}</text>
-    </svg></div>}
-  </div>;
+  );
 }
 
 const shortLabel = (c: Cluster): string => {

@@ -67,11 +67,12 @@ export default function App() {
         setView(v);
         const u = pendingUrl.current;
         const same = u.game === d.meta.gameId && u.play === d.meta.playId;
-        const frame = same && u.frame != null
-          ? frameIndexOf(d, u.frame)
-          : d.meta.gameId === 2021090900 && d.meta.playId === 1687
-            ? Math.min(v.endIdx, v.snapIdx + 18)
-            : v.snapIdx;
+        const frame =
+          same && u.frame != null
+            ? frameIndexOf(d, u.frame)
+            : d.meta.gameId === 2021090900 && d.meta.playId === 1687
+              ? Math.min(v.endIdx, v.snapIdx + 18)
+              : v.snapIdx;
         dispatch({ type: 'reset', frame, selectedId: same ? u.sel : null });
         pendingUrl.current = { game: null, play: null, frame: null, sel: null };
       })
@@ -89,7 +90,9 @@ export default function App() {
     fetchAggregate()
       .then((data) => live && setAggregate(data))
       .catch((e: Error) => live && setAggregateError(e.message));
-    return () => { live = false; };
+    return () => {
+      live = false;
+    };
   }, [tab, aggregate]);
 
   // Keep the URL in sync (deep links: game, play, frame, sel).
@@ -179,8 +182,23 @@ export default function App() {
             <h1>Defensive Attention</h1>
           </div>
           <nav className="main-tabs" aria-label="Main views">
-            <button className={tab === 'play' ? 'active' : ''} aria-current={tab === 'play' ? 'page' : undefined} onClick={() => setTab('play')}>Play analysis</button>
-            <button className={tab === 'aggregate' ? 'active' : ''} aria-current={tab === 'aggregate' ? 'page' : undefined} onClick={() => { dispatch({ type: 'pause' }); setTab('aggregate'); }}>Aggregate validation</button>
+            <button
+              className={tab === 'play' ? 'active' : ''}
+              aria-current={tab === 'play' ? 'page' : undefined}
+              onClick={() => setTab('play')}
+            >
+              Play analysis
+            </button>
+            <button
+              className={tab === 'aggregate' ? 'active' : ''}
+              aria-current={tab === 'aggregate' ? 'page' : undefined}
+              onClick={() => {
+                dispatch({ type: 'pause' });
+                setTab('aggregate');
+              }}
+            >
+              Aggregate validation
+            </button>
           </nav>
           <span
             className="badge-honest"
@@ -211,7 +229,16 @@ export default function App() {
         )}
 
         {tab === 'aggregate' ? (
-          aggregate ? <Aggregate data={aggregate} /> : <div className={aggregateError ? 'error' : 'loading'} role={aggregateError ? 'alert' : undefined}>{aggregateError ?? 'Loading validation data…'}</div>
+          aggregate ? (
+            <Aggregate data={aggregate} />
+          ) : (
+            <div
+              className={aggregateError ? 'error' : 'loading'}
+              role={aggregateError ? 'alert' : undefined}
+            >
+              {aggregateError ?? 'Loading validation data…'}
+            </div>
+          )
         ) : view ? (
           <main className="grid">
             <div className="col-left">
@@ -227,14 +254,27 @@ export default function App() {
               <SelectedPanel view={view} />
               <PressurePanel view={view} />
               <PostPlayPanel view={view} />
-              <section className="panel aggregate-shortcut"><h2>Aggregate validation</h2><button onClick={() => { dispatch({ type: 'pause' }); setTab('aggregate'); }}>QB decision gaps · Calibration →</button></section>
+              <section className="panel aggregate-shortcut">
+                <h2>Aggregate validation</h2>
+                <button
+                  onClick={() => {
+                    dispatch({ type: 'pause' });
+                    setTab('aggregate');
+                  }}
+                >
+                  QB decision gaps · Calibration →
+                </button>
+              </section>
             </aside>
           </main>
         ) : (
           !error && <div className="loading">Loading play…</div>
         )}
 
-        <footer className="foot">Recorded 2021 NGS tracking · 1× playback = game speed, not a live feed · Roles: PFF · Results: play-by-play · Estimates: model</footer>
+        <footer className="foot">
+          Recorded 2021 NGS tracking · 1× playback = game speed, not a live feed · Roles: PFF ·
+          Results: play-by-play · Estimates: model
+        </footer>
       </div>
     </UiContext.Provider>
   );
@@ -325,64 +365,67 @@ function LayerBar() {
     </button>
   );
   return (
-    <details className="layer-menu"><summary>Field layers</summary><div className="layerbar" role="toolbar" aria-label="Field layers">
-      <label className="layer-select" title="Coverage influence surface (canvas)">
-        Heatmap
-        <select
-          value={L.heat}
-          onChange={(e) => dispatch({ type: 'heat', mode: e.target.value as HeatMode })}
+    <details className="layer-menu">
+      <summary>Field layers</summary>
+      <div className="layerbar" role="toolbar" aria-label="Field layers">
+        <label className="layer-select" title="Coverage influence surface (canvas)">
+          Heatmap
+          <select
+            value={L.heat}
+            onChange={(e) => dispatch({ type: 'heat', mode: e.target.value as HeatMode })}
+          >
+            <option value="off">Off</option>
+            <option value="defense">Defense influence</option>
+            <option value="control">Offense vs defense</option>
+          </select>
+        </label>
+        {toggle(
+          'shadows',
+          'Shadows',
+          'Cone behind each defender as seen from the QB: a straight 2D pass cannot get through (ball height ignored)',
+        )}
+        {toggle(
+          'edges',
+          'Attention',
+          'Defender → player lines where the attention weight is at least 0.15',
+        )}
+        {toggle(
+          'trails',
+          'Trails',
+          'Selected player: past frames solid, next frames dashed (tracking)',
+        )}
+        <label className="layer-select" title="Trail length: frames before and after the playhead">
+          Trail ±
+          <select
+            value={state.trailFrames}
+            onChange={(e) => dispatch({ type: 'trailFrames', n: Number(e.target.value) })}
+          >
+            {[5, 10, 15, 20, 30].map((n) => (
+              <option key={n} value={n}>{`${(n / 10).toFixed(1)} s`}</option>
+            ))}
+          </select>
+        </label>
+        <button
+          className={`layer-btn${state.trailAll ? ' on' : ''}`}
+          aria-pressed={state.trailAll}
+          onClick={() => dispatch({ type: 'trailAll', value: !state.trailAll })}
+          title="Trails for all 22 players"
         >
-          <option value="off">Off</option>
-          <option value="defense">Defense influence</option>
-          <option value="control">Offense vs defense</option>
-        </select>
-      </label>
-      {toggle(
-        'shadows',
-        'Shadows',
-        'Cone behind each defender as seen from the QB: a straight 2D pass cannot get through (ball height ignored)',
-      )}
-      {toggle(
-        'edges',
-        'Attention',
-        'Defender → player lines where the attention weight is at least 0.15',
-      )}
-      {toggle(
-        'trails',
-        'Trails',
-        'Selected player: past frames solid, next frames dashed (tracking)',
-      )}
-      <label className="layer-select" title="Trail length: frames before and after the playhead">
-        Trail ±
-        <select
-          value={state.trailFrames}
-          onChange={(e) => dispatch({ type: 'trailFrames', n: Number(e.target.value) })}
-        >
-          {[5, 10, 15, 20, 30].map((n) => (
-            <option key={n} value={n}>{`${(n / 10).toFixed(1)} s`}</option>
-          ))}
-        </select>
-      </label>
-      <button
-        className={`layer-btn${state.trailAll ? ' on' : ''}`}
-        aria-pressed={state.trailAll}
-        onClick={() => dispatch({ type: 'trailAll', value: !state.trailAll })}
-        title="Trails for all 22 players"
-      >
-        All players
-      </button>
-      {toggle(
-        'projection',
-        '+0.5 s projection',
-        'Where each route runner and coverage defender is heading in 0.5 s at current velocity',
-      )}
-      {toggle(
-        'catchPoints',
-        'Catch points',
-        'Projected catch point with per-receiver ball flight time, top 3 options + selected',
-      )}
-      {toggle('showActual', 'Show actual', 'Draw the actual target path before the throw')}
-    </div></details>
+          All players
+        </button>
+        {toggle(
+          'projection',
+          '+0.5 s projection',
+          'Where each route runner and coverage defender is heading in 0.5 s at current velocity',
+        )}
+        {toggle(
+          'catchPoints',
+          'Catch points',
+          'Projected catch point with per-receiver ball flight time, top 3 options + selected',
+        )}
+        {toggle('showActual', 'Show actual', 'Draw the actual target path before the throw')}
+      </div>
+    </details>
   );
 }
 

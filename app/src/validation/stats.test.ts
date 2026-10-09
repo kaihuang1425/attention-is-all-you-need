@@ -1,10 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import { bootstrapMean, calibration, filteredRows, qbSummary, type AggregateRow } from './stats';
 
-const row = (week: number, pCatch: number, complete: boolean, gap: number, timeToThrow = 2.8): AggregateRow => ({
-  gameId: 1, playId: week, week, qb: 'Example QB', coverage: 'Cover-3', coverageType: 'Zone',
-  timeToThrow, gap, pCatch, complete, samePick: gap === 0, bestX: 10, bestY: 20,
-  targetX: 12, targetY: 22,
+const row = (
+  week: number,
+  pCatch: number,
+  complete: boolean,
+  gap: number,
+  timeToThrow = 2.8,
+): AggregateRow => ({
+  gameId: 1,
+  playId: week,
+  week,
+  qb: 'Example QB',
+  coverage: 'Cover-3',
+  coverageType: 'Zone',
+  timeToThrow,
+  gap,
+  pCatch,
+  complete,
+  samePick: gap === 0,
+  bestX: 10,
+  bestY: 20,
+  targetX: 12,
+  targetY: 22,
 });
 
 describe('aggregate validation summaries', () => {

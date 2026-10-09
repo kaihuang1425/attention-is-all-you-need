@@ -1,4 +1,5 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import {
   ballAt,
   lastName,
@@ -22,6 +23,18 @@ interface Props {
   view: PlayView;
 }
 
+/**
+ * The field is drawn as a schematic that fills its panel, so x and y have different scales.
+ * Text and round markers are drawn inside <Glyph>, which undoes the horizontal stretch so they
+ * keep their shape. GlyphScale holds that correction (screen y-scale / x-scale).
+ */
+const GlyphScale = createContext(1);
+
+function Glyph({ x, y, children }: { x: number; y: number; children: ReactNode }) {
+  const sx = useContext(GlyphScale);
+  return <g transform={`translate(${x} ${y}) scale(${sx} 1)`}>{children}</g>;
+}
+
 export default function Field({ view }: Props) {
   const { state, dispatch } = useUi();
   const wrap = useRef<HTMLDivElement>(null);
@@ -39,7 +52,8 @@ export default function Field({ view }: Props) {
   }, []);
 
   const crop = useMemo(() => computeCrop(view), [view]);
-  const glyphScaleX = (size.h * (crop.x1 - crop.x0)) / (size.w * (crop.y1 - crop.y0));
+  const rawScale = (size.h * (crop.x1 - crop.x0)) / (size.w * (crop.y1 - crop.y0));
+  const glyphScaleX = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
   const f = state.frame;
   const i = Math.round(f);
   const { layers } = state;
@@ -80,7 +94,9 @@ export default function Field({ view }: Props) {
         height={size.h}
         aria-hidden="true"
       >
-        <Surface crop={crop} heat={layers.heat !== 'off'} />
+        <GlyphScale.Provider value={glyphScaleX}>
+          <Surface crop={crop} heat={layers.heat !== 'off'} />
+        </GlyphScale.Provider>
       </svg>
       <HeatCanvas
         view={view}
@@ -139,88 +155,93 @@ export default function Field({ view }: Props) {
           </clipPath>
         </defs>
 
-        {layers.shadows && <Shadows view={view} frame={f} />}
-        <Lines view={view} crop={crop} />
-        {layers.protection && <Protection view={view} frame={f} />}
-        {layers.edges && <Edges view={view} frame={i} at={f} focusId={focusId} />}
-        {layers.trails && (
-          <Trails
+        <GlyphScale.Provider value={glyphScaleX}>
+          {layers.shadows && <Shadows view={view} frame={f} />}
+          <Lines view={view} crop={crop} />
+          {layers.protection && <Protection view={view} frame={f} />}
+          {layers.edges && <Edges view={view} frame={i} at={f} focusId={focusId} />}
+          {layers.trails && (
+            <Trails
+              view={view}
+              frame={f}
+              n={state.trailFrames}
+              ids={
+                state.trailAll
+                  ? view.data.players.map((p) => p.id)
+                  : focusIds(state.selectedId, state.hoveredId)
+              }
+            />
+          )}
+          {layers.projection && <Projections view={view} frame={i} />}
+
+          {layers.catchPoints && legal && qb && (
+            <g className="catch-points">
+              {rows
+                .filter((r) => catchIds.has(r.id) && r.catchX != null && r.catchY != null)
+                .map((r) => (
+                  <g key={r.id}>
+                    <ellipse
+                      cx={r.catchX!}
+                      cy={sy(r.catchY!)}
+                      rx={1.1 * glyphScaleX}
+                      ry={1.1}
+                      className={`catch-circle${r.id === pick ? ' is-pick' : ''}`}
+                    />
+                    {(r.id === pick || r.id === state.selectedId) &&
+                      (() => {
+                        const label = `#${r.jersey} · ${r.tBall?.toFixed(1)} s flight`;
+                        const gap = 1.5 * glyphScaleX;
+                        const left = r.catchX! + gap + 0.62 * label.length * glyphScaleX > crop.x1;
+                        return (
+                          <Glyph
+                            x={left ? r.catchX! - gap : r.catchX! + gap}
+                            y={sy(r.catchY!) + (sy(r.catchY!) - 1.5 < sy(crop.y1) ? 2.2 : -1.0)}
+                          >
+                            <text textAnchor={left ? 'end' : 'start'} className="catch-label">
+                              {label}
+                            </text>
+                          </Glyph>
+                        );
+                      })()}
+                  </g>
+                ))}
+              {pickRow && pickRow.catchX != null && (
+                <line
+                  x1={qb.x}
+                  y1={sy(qb.y)}
+                  x2={pickRow.catchX}
+                  y2={sy(pickRow.catchY!)}
+                  className="path-pick"
+                  markerEnd="url(#arrow-pick)"
+                />
+              )}
+            </g>
+          )}
+          {showActual && actualCatch && qbAtThrow && (
+            <line
+              x1={qbAtThrow.x}
+              y1={sy(qbAtThrow.y)}
+              x2={actualCatch.x}
+              y2={sy(actualCatch.y)}
+              className="path-actual"
+              markerEnd="url(#arrow-actual)"
+            />
+          )}
+
+          <Players
             view={view}
             frame={f}
-            n={state.trailFrames}
-            ids={
-              state.trailAll
-                ? view.data.players.map((p) => p.id)
-                : focusIds(state.selectedId, state.hoveredId)
-            }
+            selectedId={state.selectedId}
+            hoveredId={state.hoveredId}
+            pickId={legal ? pick : null}
+            actualId={showActual ? target : null}
+            glyphScaleX={glyphScaleX}
+            onSelect={(id) => dispatch({ type: 'select', id })}
+            onHover={(id) => dispatch({ type: 'hover', id })}
           />
-        )}
-        {layers.projection && <Projections view={view} frame={i} />}
-
-        {layers.catchPoints && legal && qb && (
-          <g className="catch-points">
-            {rows
-              .filter((r) => catchIds.has(r.id) && r.catchX != null && r.catchY != null)
-              .map((r) => (
-                <g key={r.id}>
-                  <circle
-                    cx={r.catchX!}
-                    cy={sy(r.catchY!)}
-                    r={1.1}
-                    className={`catch-circle${r.id === pick ? ' is-pick' : ''}`}
-                  />
-                  {(r.id === pick || r.id === state.selectedId) && (() => {
-                    const label = `#${r.jersey} · ${r.tBall?.toFixed(1)} s flight`;
-                    const left = r.catchX! + 1.5 + 0.62 * label.length > crop.x1;
-                    return (
-                      <text
-                        x={left ? r.catchX! - 1.5 : r.catchX! + 1.5}
-                        y={sy(r.catchY!) + (sy(r.catchY!) - 1.5 < sy(crop.y1) ? 2.2 : -1.0)}
-                        textAnchor={left ? 'end' : 'start'}
-                        className="catch-label"
-                      >
-                        {label}
-                      </text>
-                    );
-                  })()}
-                </g>
-              ))}
-            {pickRow && pickRow.catchX != null && (
-              <line
-                x1={qb.x}
-                y1={sy(qb.y)}
-                x2={pickRow.catchX}
-                y2={sy(pickRow.catchY!)}
-                className="path-pick"
-                markerEnd="url(#arrow-pick)"
-              />
-            )}
-          </g>
-        )}
-        {showActual && actualCatch && qbAtThrow && (
-          <line
-            x1={qbAtThrow.x}
-            y1={sy(qbAtThrow.y)}
-            x2={actualCatch.x}
-            y2={sy(actualCatch.y)}
-            className="path-actual"
-            markerEnd="url(#arrow-actual)"
-          />
-        )}
-
-        <Players
-          view={view}
-          frame={f}
-          selectedId={state.selectedId}
-          hoveredId={state.hoveredId}
-          pickId={legal ? pick : null}
-          actualId={showActual ? target : null}
-          glyphScaleX={glyphScaleX}
-          onSelect={(id) => dispatch({ type: 'select', id })}
-          onHover={(id) => dispatch({ type: 'hover', id })}
-        />
-        <Ball view={view} frame={f} />
-        {selected && <Callout view={view} frame={f} p={selected} glyphScaleX={glyphScaleX} />}
+          <Ball view={view} frame={f} />
+          {selected && <Callout view={view} frame={f} p={selected} glyphScaleX={glyphScaleX} />}
+        </GlyphScale.Provider>
       </svg>
       <Tooltip view={view} frame={i} crop={crop} size={size} />
       <div className="attack-tag" aria-hidden="true">
@@ -288,12 +309,12 @@ const Surface = memo(function Surface({ crop, heat }: { crop: Crop; heat: boolea
       ))}
       {nums.map((x) => (
         <g key={`n${x}`} className="yard-num">
-          <text x={x} y={sy(12) + 1.0} textAnchor="middle">
-            {yardNumber(x)}
-          </text>
-          <text x={x} y={sy(FIELD_W - 12) + 1.0} textAnchor="middle">
-            {yardNumber(x)}
-          </text>
+          <Glyph x={x} y={sy(12) + 1.0}>
+            <text textAnchor="middle">{yardNumber(x)}</text>
+          </Glyph>
+          <Glyph x={x} y={sy(FIELD_W - 12) + 1.0}>
+            <text textAnchor="middle">{yardNumber(x)}</text>
+          </Glyph>
         </g>
       ))}
       <rect x={0} y={0} width={FIELD_L} height={FIELD_W} className="sideline" />
@@ -312,18 +333,25 @@ function Lines({ view, crop }: { view: PlayView; crop: Crop }) {
       <line x1={m.los_x} x2={m.los_x} y1={0} y2={FIELD_W} className="los" />
       <line x1={m.firstDown_x} x2={m.firstDown_x} y1={0} y2={FIELD_W} className="first-down" />
       {/* LOS tag sits left of its line, first-down tag right of its line, so they never overlap. */}
-      <g transform={`translate(${m.los_x - 0.4 - wOf(los)}, ${tagY})`}>
-        <rect x={0} y={-1.2} width={wOf(los)} height={2.1} rx={0.35} className="tag tag-los" />
-        <text x={wOf(los) / 2} textAnchor="middle" y={0.4} className="tag-text">
+      <Glyph x={m.los_x - 0.3} y={tagY}>
+        <rect
+          x={-wOf(los)}
+          y={-1.2}
+          width={wOf(los)}
+          height={2.1}
+          rx={0.35}
+          className="tag tag-los"
+        />
+        <text x={-wOf(los) / 2} textAnchor="middle" y={0.4} className="tag-text">
           {los}
         </text>
-      </g>
-      <g transform={`translate(${m.firstDown_x + 0.4}, ${tagY})`}>
+      </Glyph>
+      <Glyph x={m.firstDown_x + 0.3} y={tagY}>
         <rect x={0} y={-1.2} width={wOf(fd)} height={2.1} rx={0.35} className="tag tag-fd" />
         <text x={wOf(fd) / 2} textAnchor="middle" y={0.4} className="tag-text tag-text-dark">
           {fd}
         </text>
-      </g>
+      </Glyph>
     </g>
   );
 }
@@ -415,6 +443,7 @@ function Trails({
   ids: number[];
 }) {
   const i = Math.round(frame);
+  const sx = useContext(GlyphScale);
   return (
     <g className="trails">
       {ids.map((id) => {
@@ -446,11 +475,12 @@ function Trails({
               />
             ))}
             {past.slice(0, -1).map((q, k) => (
-              <circle
+              <ellipse
                 key={`pd${k}`}
                 cx={q.x}
                 cy={sy(q.y)}
-                r={0.18}
+                rx={0.18 * sx}
+                ry={0.18}
                 className="trail-dot"
                 opacity={0.2 + (0.6 * (k + 1)) / past.length}
               />
@@ -462,21 +492,32 @@ function Trails({
               />
             )}
             {future.slice(1).map((q, k) => (
-              <circle key={`fd${k}`} cx={q.x} cy={sy(q.y)} r={0.16} className="trail-dot-future" />
+              <ellipse
+                key={`fd${k}`}
+                cx={q.x}
+                cy={sy(q.y)}
+                rx={0.16 * sx}
+                ry={0.16}
+                className="trail-dot-future"
+              />
             ))}
             {future.length > 1 &&
               last &&
               (p.side === 'offense' ? (
-                <circle cx={last.x} cy={sy(last.y)} r={R_OFF} className="ghost" />
+                <Glyph x={last.x} y={sy(last.y)}>
+                  <circle r={R_OFF} className="ghost" />
+                </Glyph>
               ) : (
-                <rect
-                  x={last.x - R_DEF * 0.72}
-                  y={sy(last.y) - R_DEF * 0.72}
-                  width={R_DEF * 1.44}
-                  height={R_DEF * 1.44}
-                  transform={`rotate(45 ${last.x} ${sy(last.y)})`}
-                  className="ghost"
-                />
+                <Glyph x={last.x} y={sy(last.y)}>
+                  <rect
+                    x={-R_DEF * 0.72}
+                    y={-R_DEF * 0.72}
+                    width={R_DEF * 1.44}
+                    height={R_DEF * 1.44}
+                    transform="rotate(45)"
+                    className="ghost"
+                  />
+                </Glyph>
               ))}
           </g>
         );
@@ -486,6 +527,7 @@ function Trails({
 }
 
 function Projections({ view, frame }: { view: PlayView; frame: number }) {
+  const sx = useContext(GlyphScale);
   return (
     <g className="projections">
       {view.data.players
@@ -506,7 +548,7 @@ function Projections({ view, frame }: { view: PlayView; frame: number }) {
                 className="proj-line"
                 markerEnd="url(#arrow-proj)"
               />
-              <circle cx={b.x} cy={sy(b.y)} r={0.75} className="proj-ghost" />
+              <ellipse cx={b.x} cy={sy(b.y)} rx={0.75 * sx} ry={0.75} className="proj-ghost" />
             </g>
           );
         })}
@@ -515,6 +557,7 @@ function Projections({ view, frame }: { view: PlayView; frame: number }) {
 }
 
 function Protection({ view, frame }: { view: PlayView; frame: number }) {
+  const sx = useContext(GlyphScale);
   const assigned = new Set<number>();
   view.data.players.forEach((p) => p.blockedId != null && assigned.add(p.blockedId));
   return (
@@ -540,10 +583,12 @@ function Protection({ view, frame }: { view: PlayView; frame: number }) {
           if (!a) return null;
           return (
             <g key={`u${p.id}`}>
-              <circle cx={a.x} cy={sy(a.y)} r={2.0} className="unassigned-ring" />
-              <text x={a.x} y={sy(a.y) + 3.2} textAnchor="middle" className="unassigned-text">
-                no first assignment
-              </text>
+              <ellipse cx={a.x} cy={sy(a.y)} rx={2.0 * sx} ry={2.0} className="unassigned-ring" />
+              <Glyph x={a.x} y={sy(a.y) + 3.2}>
+                <text textAnchor="middle" className="unassigned-text">
+                  no first assignment
+                </text>
+              </Glyph>
             </g>
           );
         })}
@@ -640,12 +685,25 @@ function Players({
 }
 
 function Ball({ view, frame }: { view: PlayView; frame: number }) {
+  const sx = useContext(GlyphScale);
   const b = ballAt(view, frame);
   if (!b) return null;
-  return <ellipse cx={b.x + 0.55} cy={sy(b.y) - 0.55} rx={0.42} ry={0.27} className="ball" />;
+  return (
+    <ellipse cx={b.x + 0.55 * sx} cy={sy(b.y) - 0.55} rx={0.42 * sx} ry={0.27} className="ball" />
+  );
 }
 
-function Callout({ view, frame, p, glyphScaleX }: { view: PlayView; frame: number; p: PlayerInfo; glyphScaleX: number }) {
+function Callout({
+  view,
+  frame,
+  p,
+  glyphScaleX,
+}: {
+  view: PlayView;
+  frame: number;
+  p: PlayerInfo;
+  glyphScaleX: number;
+}) {
   const q = posAt(view, p.id, frame);
   if (!q) return null;
   const text = `${p.position} #${p.jersey} ${lastName(p.name)}`;
