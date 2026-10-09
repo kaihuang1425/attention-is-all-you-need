@@ -1,14 +1,16 @@
 # Attention is all you need
 
-Defensive Attention is an interactive replay of recorded 2021 NFL passing plays, built from player tracking, play-by-play data, and clearly marked model estimates. It reveals estimated defensive attention, passing windows, and how the quarterback's actual target compares with the model's top pass option at release. Its core metric, Safety Pull, shows that against single-high coverage a receiver who drags the deep safety gives his targeted teammate +0.25 yards of separation and +4 points of completion rate, with no effect against two-high shells. Coaches, analysts, and broadcasters can use it to explain a play, then check whether its signals hold up across thousands of throws.
+Defensive Attention is a web app that replays 2021 NFL passing plays (Weeks 1–8 player tracking) from snap to throw, estimating how much defensive attention each offensive player draws and ranking every pass option frame by frame by catch probability and expected points. It reveals which receivers pull the deep safeties away from their teammates (outside receivers 8–18 yards downfield draw up to twice their fair share, and against single-high coverage that pull comes with +0.25 yards of separation and +4 points of completion rate for the targeted receiver) and where the quarterback's throw differed from the model's best option at release. Coaches can use it to design decoy routes and review a quarterback's reads, scouts to find receivers whose value never shows up in their own stats, and broadcasters to show viewers who opened the play.
 
-The specs and build prompts are in [`docs/`](docs/README.md). Start with `docs/00_PROJECT_BRIEF.md`.
+![Defensive Attention replaying DAL @ TB, play 1687, 1.8 s after the snap](docs/preview.png)
 
 > **For judges:** the summary above is our submission. Everything below is setup and technical reference, so it's optional.
 
+The specs and build prompts are in [`docs/`](docs/README.md). Start with `docs/00_PROJECT_BRIEF.md`.
+
 ## Quick start
 
-The bundled demo works without downloading or processing the dataset:
+The bundled demo works without downloading or processing the dataset. You need [Node.js](https://nodejs.org) 20 or newer. On Windows, double-click `run-demo.cmd`; on macOS or Linux, run `./run-demo.sh`. Either script installs the app's packages on the first run and opens the browser. By hand:
 
 ```bash
 cd app
@@ -20,9 +22,11 @@ Open the local URL printed by Vite. Pick one of the three starred plays. **1× p
 
 ## Demo in 60 seconds
 
-1. Open the starred **DAL vs TB** play and pause near **1.8 s**. Point to the yellow attention edges and the ranked pass options beside the field.
+1. Open the starred **DAL @ TB** play and pause near **1.8 s**. Point to the yellow attention edges and the ranked pass options beside the field.
 2. Play through the throw. Prescott targeted Lamb #88 and the pass was incomplete; the model ranks Jarwin #89 highest at release. The alternative outcome is unknown.
 3. Open **Aggregate validation** to show how the pass model performs across eligible throws, including held-out completion calibration.
+
+The timed two-minute recording script is [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
 
 ## Regenerate the data
 
@@ -47,7 +51,7 @@ The app includes:
 - **Aggregate validation**: QB pass-target decision gaps with 90% bootstrap intervals (at least 50 eligible throws per QB), weeks 7-8 completion calibration, Man/Zone attention sanity, and projected catch locations. All charts state their sample and model scope.
 - Keys: Space play/pause, ←/→ one frame, Shift+←/→ five frames, `[` `]` previous/next visible flag, Home/End, Esc clears the selection. Deep links: `?game=2021090900&play=1687&frame=24&sel=52425`.
 
-**What the demo can claim:** recorded player positions and observed play outcomes come from the event data. Attention, projected catch points, completion probability and expected EPA are model estimates. The screenshot's Wilson pick is illustrative: this export ranks Jarwin #89 as the top pass at release on play 1687. Scramble, throw away and hold have no comparable EPA estimate yet, so decision gaps cover pass targets only. Alternative outcomes are unknown.
+**What the demo can claim:** recorded player positions and observed play outcomes come from the event data. Attention, projected catch points, completion probability and expected EPA are model estimates. The mockup's Wilson pick is illustrative: this export ranks Jarwin #89 as the top pass at release on play 1687. Scramble, throw away and hold have no comparable EPA estimate yet, so decision gaps cover pass targets only. Alternative outcomes are unknown.
 
 The stages also run on their own:
 
