@@ -309,8 +309,10 @@ def export_play(data, gid, pid, plays, pff, players, games, model, out, label):
             df = pd.DataFrame({k: m[k] for k in ["sep", "lane", "attention", "depth"]})
             prob = model.p(df)
             val = value(prob, m["depth"], m["reaches_sticks"])
-            rv = (-val).argsort().argsort() + 1
-            rs = (-prob).argsort().argsort() + 1
+            ids = np.array(c["routes"], dtype=float)
+            # ties (e.g. several options worth 0 yds) break by the other score, then by id: same rule as the TS port
+            rv = np.empty(len(ids), int); rv[np.lexsort((ids, -prob, -val))] = np.arange(1, len(ids) + 1)
+            rs = np.empty(len(ids), int); rs[np.lexsort((ids, -val, -prob))] = np.arange(1, len(ids) + 1)
             recs = [dict(id=int(r), jersey=jersey[r], sep=round(float(m["sep"][k]), 2),
                          attention=round(float(m["attention"][k]), 2), lane=round(float(m["lane"][k]), 2),
                          depth=round(float(m["depth"][k]), 2), reaches_sticks=bool(m["reaches_sticks"][k]),

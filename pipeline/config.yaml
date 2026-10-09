@@ -15,9 +15,9 @@ timing:
   snap_moving_start_speed: 1.0    # no snap event and ball already this fast on frame 1: snap happened before tracking
 
 attention:                        # section 2
-  sigma: 4.0                      # yd; distance scale in score = -dist/sigma + k*cos(theta)
-  k: 1.0                          # weight on body-orientation alignment cos(theta)
-  temperature: 1.0                # softmax temperature T over each defender's row
+  sigma: 3.0                    # yd; distance scale in score = -dist/sigma + k*cos(theta) [tuned P04 grid search, weeks 1-6]
+  k: 1.0                        # weight on body-orientation alignment cos(theta) [tuned P04 grid search, weeks 1-6]
+  temperature: 0.75              # softmax temperature T over each defender's row [tuned P04 grid search, weeks 1-6]
   unattached_score: -3.0          # fixed score of the "unattached" column (attention spent on space)
   orientation_smoothing_frames: 3 # circular mean window applied to o before use
   export_min_weight: 0.05         # sparse edges written to the per-play JSON
@@ -32,7 +32,9 @@ arrival:                          # section 3
   v_max_floor: 7.0                # yd/s; defender top speed = max(observed max this play, this)
   tau_catch: 0.25                 # s; pCatch = sigmoid(margin / tau_catch) before calibration
   c_int: 0.08                     # interception scale: pInt = c_int * (1 - pCatch) * closeness
+  int_closeness_yd: 1.5           # yd; closeness = exp(-yards the fastest defender is short of p / this)
   field_clamp:                    # catch point is kept inside the field
+    x_min: 0.5
     y_min: 0.5
     y_max: 52.8
     x_max: 119.5
