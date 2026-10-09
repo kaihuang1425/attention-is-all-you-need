@@ -4,6 +4,8 @@ Defensive Attention is an interactive replay of recorded 2021 NFL passing plays,
 
 The specs and build prompts are in [`docs/`](docs/README.md). Start with `docs/00_PROJECT_BRIEF.md`.
 
+> **For judges:** the summary above is our submission. Everything below is setup and technical reference, so it's optional.
+
 ## Quick start
 
 The bundled demo works without downloading or processing the dataset:
