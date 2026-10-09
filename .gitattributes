@@ -1,0 +1,6 @@
+# Keep LF in the repo so scripts run in Git Bash and on Linux/macOS.
+* text=auto eol=lf
+*.sh text eol=lf
+*.png binary
+*.jpg binary
+*.parquet binary

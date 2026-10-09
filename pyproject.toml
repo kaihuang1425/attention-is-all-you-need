@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "defensive-attention-pipeline"
+version = "0.1.0"
+description = "Pipeline for the Defensive Attention play replay tool (Big Data Bowl regional event data, 2021 weeks 1-8)"
+requires-python = ">=3.10"
+dependencies = [
+  "pandas>=2.2",
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "scikit-learn>=1.4",
+  "pyarrow>=15",
+  "pyyaml>=6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools]
+packages = ["pipeline"]
+
+[tool.setuptools.package-data]
+pipeline = ["config.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["pipeline/tests"]
+addopts = "-ra"
+markers = [
+  "data: needs the cloned event data in data/raw (run scripts/get_data.sh)",
+]

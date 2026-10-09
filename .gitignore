@@ -1,0 +1,26 @@
+# Data (clone with scripts/get_data.sh; everything under data/ is rebuilt by the pipeline)
+data/raw/
+data/derived/
+data/external/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+app/dist/
+app/coverage/
+*.tsbuildinfo
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,80 @@
+# Model parameters for the Defensive Attention pipeline.
+# Every value is a starting value from docs/02_MODEL_SPEC.md unless a comment says it was tuned.
+# Units: yards (yd), seconds (s), yards per second (yd/s). Coordinates are normalised (offense attacks +x).
+
+data:
+  raw_dir: data/raw/data          # where scripts/get_data.sh puts the CSVs (override with NFL_DATA_DIR)
+  derived_dir: data/derived       # pipeline intermediates (parquet)
+  external_dir: data/external     # optional nflverse files, e.g. pbp_2021.parquet
+  export_dir: app/public/data     # JSON the app reads
+
+timing:
+  fps: 10                         # tracking frame rate; frame is the unit of time
+  post_end_frames: 5              # tracking runs ~0.5 s past the throw / sack / scramble
+  snap_infer_move_yd: 0.3         # no snap event: snap = frame before the ball's first frame-to-frame jump > this
+  snap_moving_start_speed: 1.0    # no snap event and ball already this fast on frame 1: snap happened before tracking
+
+attention:                        # section 2
+  sigma: 4.0                      # yd; distance scale in score = -dist/sigma + k*cos(theta)
+  k: 1.0                          # weight on body-orientation alignment cos(theta)
+  temperature: 1.0                # softmax temperature T over each defender's row
+  unattached_score: -3.0          # fixed score of the "unattached" column (attention spent on space)
+  orientation_smoothing_frames: 3 # circular mean window applied to o before use
+  export_min_weight: 0.05         # sparse edges written to the per-play JSON
+  draw_min_weight: 0.15           # edges drawn on the field
+
+arrival:                          # section 3
+  v_ball: 24.0                    # yd/s default release speed (measured median 24.7, IQR 21.8-27.3)
+  t_release: 0.2                  # s to get the throw off
+  initial_projection_s: 0.8       # s; first guess for the catch point before fixed-point iteration
+  fixed_point_iterations: 3       # catch point / ball time iterations
+  tau_react: 0.5                  # s defender reaction time
+  v_max_floor: 7.0                # yd/s; defender top speed = max(observed max this play, this)
+  tau_catch: 0.25                 # s; pCatch = sigmoid(margin / tau_catch) before calibration
+  c_int: 0.08                     # interception scale: pInt = c_int * (1 - pCatch) * closeness
+  field_clamp:                    # catch point is kept inside the field
+    y_min: 0.5
+    y_max: 52.8
+    x_max: 119.5
+
+values:                           # section 4
+  ep_version: auto                # "auto" = nflverse fit if data/external/pbp_2021.parquet exists, else hand-built v1
+  yac_short: 2.0                  # yd expected YAC after a short completion (tune)
+  yac_deep: 3.5                   # yd expected YAC after a deep completion (tune)
+  deep_air_yards: 15.0            # yd past the LOS that counts as "deep" (play-by-play convention)
+
+options:                          # section 5
+  qb_scramble_speed: 6.5          # yd/s QB running speed for the scramble lane
+  scramble_directions: 9          # lanes sampled between -angle and +angle from +x
+  scramble_angle_deg: 60.0        # half-width of the scramble fan
+  grounding_receiver_radius: 5.0  # yd; an eligible receiver this close to the landing point avoids grounding
+  hold_horizon_s: 0.5             # s; Hold = value of waiting this long
+  sack_yards: -7.0                # yd; typical sack loss used in the Hold value
+
+sack_hazard:                      # section 5
+  horizon_frames: 5               # label = sack or QB hit within the next 5 frames (0.5 s)
+  train_weeks: [1, 2, 3, 4, 5, 6]
+  test_weeks: [7, 8]
+  strain_clip: [-2.0, 5.0]        # 1/s; STRAIN = -(dd/dt) / d, clipped to this range
+
+lanes:                            # section 6
+  path_samples: 10                # points sampled on the straight QB -> catch point path
+  tight_lane_yd: 1.5              # clearance under this is a "tight lane"
+  batted_dl_qb_yd: 2.0            # defensive lineman this close to the QB at release ...
+  batted_path_yd: 1.0             # ... and this close to the path at the first sample = batted-ball risk
+
+gravity:                          # section 6
+  depth_buckets_yd: [5.0, 15.0]   # route depth buckets at release: <5, 5-15, >15 yd past the LOS
+  min_bucket_plays: 30            # gravity is null when its bucket has fewer plays than this
+
+calibration:                      # section 7
+  method: isotonic                # isotonic or platt
+  bins: 10                        # reliability curve bins
+  train_weeks: [1, 2, 3, 4, 5, 6]
+  test_weeks: [7, 8]
+
+flags:                            # section 9
+  window_margin_s: 0.3            # window open while arrival margin >= this
+  hysteresis_frames: 2            # new state must hold this many frames before a flag fires
+  pressure_distance_yd: 2.0       # pressure_arrives: first rusher within this distance of the QB
+  block_beaten_frames: 2          # rusher must be past the blocker this many consecutive frames
