@@ -7,8 +7,10 @@ Usage:
     python safety_pull.py --data path/to/data --weeks 1      # quick test
 
 Outputs (in --out):
-    route_pull.csv        one row per route runner per play
-    safety_pull_heatmap.png
+    route_pull.csv            one row per route runner per play
+    safety_pull_heatmap.png   where on the field routes drag safeties (broadcast / coach)
+    decoy_effect.png/.csv     does a teammate's pull buy the target separation? (coach)
+    pull_over_expected.png/.csv   receiver leaderboard (scout)
 """
 import argparse
 import re
@@ -267,6 +269,112 @@ def heatmap(df, out, weeks=None, min_n=None):
     return path
 
 
+# ---------------------------------------------------------------- decoy effect (coach view)
+def decoy_effect(df, out, min_pull=2.0):
+    """Does a teammate dragging a safety give the targeted receiver more separation?
+    OLS per shell: sep_at_throw ~ decoy + secs_to_throw + target depth + target's own pull."""
+    import matplotlib.pyplot as plt
+
+    d = df[df["has_target"] & df["shell"].isin(["single-high", "two-high"]) & (df["n_safeties"] > 0)]
+    tgt = d[d["is_target"]].set_index(["gameId", "playId"])
+    mate = d[~d["is_target"]].groupby(["gameId", "playId"])["pull_yds"].max().rename("mate_pull")
+    p = tgt.join(mate).dropna(subset=["mate_pull"])
+    p["decoy"] = (p["mate_pull"] >= min_pull).astype(float)
+    p["complete"] = (p["passResult"] == "C").astype(float)
+
+    rows = []
+    for sh in ["single-high", "two-high"]:
+        q = p[p["shell"] == sh]
+        X = np.column_stack([np.ones(len(q)), q["decoy"], q["secs_to_throw"], q["depth"], q["pull_yds"]])
+        res = {}
+        for ycol in ["sep_at_throw", "complete"]:
+            y = q[ycol].to_numpy()
+            b = np.linalg.lstsq(X, y, rcond=None)[0]
+            r = y - X @ b
+            se = np.sqrt(np.diag(((r ** 2).sum() / (len(q) - X.shape[1])) * np.linalg.inv(X.T @ X)))
+            res[ycol] = (b[1], se[1])
+        rows.append(dict(shell=sh, plays=len(q), decoy_plays=int(q["decoy"].sum()),
+                         sep_gain=res["sep_at_throw"][0], sep_se=res["sep_at_throw"][1],
+                         comp_gain=res["complete"][0], comp_se=res["complete"][1]))
+    r = pd.DataFrame(rows)
+    r.to_csv(os.path.join(out, "decoy_effect.csv"), index=False)
+
+    plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10})
+    fig, ax = plt.subplots(figsize=(10, 3.6), facecolor="white")
+    fig.subplots_adjust(top=0.66, bottom=0.2, left=0.27, right=0.95)
+    labels = {"single-high": "Single-high\n(Cover-1, Cover-3)", "two-high": "Two-high\n(Cover-2, 2-Man, Quarters, Cover-6)"}
+    for i, row in r.iterrows():
+        yv = len(r) - 1 - i
+        lo, hi = row.sep_gain - 1.96 * row.sep_se, row.sep_gain + 1.96 * row.sep_se
+        ax.plot([lo, hi], [yv, yv], color="#2a78d6", lw=2, solid_capstyle="round")
+        ax.plot(row.sep_gain, yv, "o", ms=10, color="#2a78d6", mec="white", mew=2)
+        ax.text(hi + 0.02, yv, f"{row.sep_gain:+.2f} yds   ({int(row.decoy_plays):,} of {int(row.plays):,} plays had a decoy)",
+                va="center", color=INK, fontsize=9.5)
+    ax.axvline(0, color=INK, lw=1.2)
+    ax.set_yticks(range(len(r)), [labels[s] for s in r["shell"][::-1]])
+    ax.set_xlim(-0.35, 0.75)
+    ax.set_ylim(-0.6, len(r) - 0.4)
+    ax.set_xlabel("Extra separation for the targeted receiver at the throw (yards)", color=MUTED)
+    ax.tick_params(colors=MUTED, length=0)
+    ax.grid(axis="x", color=GRID, lw=0.6)
+    ax.set_axisbelow(True)
+    for sp in ax.spines.values():
+        sp.set_visible(False)
+    fig.text(0.02, 0.92, "A teammate dragging a safety frees the target, but only against single-high",
+             fontsize=13.5, fontweight="bold", color=INK)
+    fig.text(0.02, 0.76,
+             f"Decoy = another route runner pulled a deep safety {min_pull:.0f}+ yards toward himself before the throw. "
+             "Controls: time to throw, target depth,\nthe target's own pull. Dot = estimate, line = 95% interval. "
+             "2021 NFL Weeks 1–8, targeted throws.",
+             fontsize=9, color=MUTED, linespacing=1.5)
+    path = os.path.join(out, "decoy_effect.png")
+    fig.savefig(path, dpi=160, bbox_inches="tight", pad_inches=0.3)
+    return path
+
+
+# ---------------------------------------------------------------- Pull Over Expected (scout view)
+def leaderboard(df, out, top=15, min_routes=None):
+    """Pull Over Expected: a route runner's pull index minus the average index of routes that end
+    in the same spot (3x3-yard cell) against the same shell. The heatmap is the 'expected' model."""
+    import matplotlib.pyplot as plt
+
+    d = df[df["pull_share"].notna() & df["shell"].isin(["single-high", "two-high"])].copy()
+    d["idx"] = d["pull_share"] * d["n_routes"]
+    d["db"] = np.floor(d["depth"] / 3)
+    d["lb"] = np.floor(d["lateral"] / 3)
+    d["expected"] = d.groupby(["shell", "db", "lb"])["idx"].transform("mean")
+    d["poe"] = d["idx"] - d["expected"]
+    if min_routes is None:
+        min_routes = 60 if len(d) > 10000 else 15
+    pl = (d.groupby(["nflId", "displayName", "officialPosition"])
+          .agg(routes=("poe", "size"), pull_over_expected=("poe", "mean"), pull_index=("idx", "mean"))
+          .reset_index())
+    pl = pl[pl["routes"] >= min_routes].sort_values("pull_over_expected", ascending=False)
+    pl.to_csv(os.path.join(out, "pull_over_expected.csv"), index=False)
+
+    b = pl.head(top).iloc[::-1]
+    plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10})
+    fig, ax = plt.subplots(figsize=(9, 0.38 * len(b) + 2.2), facecolor="white")
+    ax.barh(range(len(b)), b["pull_over_expected"], color="#2a78d6", height=0.62)
+    for i, (v, n) in enumerate(zip(b["pull_over_expected"], b["routes"])):
+        ax.text(v + 0.01, i, f"+{v:.2f}", va="center", color=INK, fontsize=9)
+    ax.set_yticks(range(len(b)), [f"{nm}  ({pos}, {n} routes)" for nm, pos, n in
+                                  zip(b["displayName"], b["officialPosition"], b["routes"])])
+    ax.tick_params(colors=INK, length=0)
+    ax.set_xticks([])
+    ax.set_xlim(0, b["pull_over_expected"].max() * 1.15)
+    for sp in ax.spines.values():
+        sp.set_visible(False)
+    ax.set_title("Safety Pull Over Expected: who drags safeties more than his spot predicts\n",
+                 loc="left", fontsize=13, fontweight="bold", color=INK)
+    ax.text(0, 1.0, f"Avg per route vs. an average route ending in the same spot against the same shell "
+                    f"(+0.50 = half an extra fair share). Min {min_routes} routes. 2021 Weeks 1–8.",
+            transform=ax.transAxes, fontsize=8.5, color=MUTED, va="bottom")
+    path = os.path.join(out, "pull_over_expected.png")
+    fig.savefig(path, dpi=160, bbox_inches="tight", pad_inches=0.3)
+    return path
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True)
@@ -288,3 +396,5 @@ if __name__ == "__main__":
     if df is None:
         df = run(a.data, a.weeks, a.out)
     print(heatmap(df, a.out, a.weeks))
+    print(decoy_effect(df, a.out))
+    print(leaderboard(df, a.out))
