@@ -1,0 +1,20 @@
+[
+  {
+    "label": "Missed window: the model's #1 was open, the QB threw elsewhere (incomplete)",
+    "file": "plays\\play_2021102401_2381.json",
+    "gameId": 2021102401,
+    "playId": 2381
+  },
+  {
+    "label": "Decoy at work: a teammate dragged the safety, the #1 option was hit",
+    "file": "plays\\play_2021102404_2652.json",
+    "gameId": 2021102404,
+    "playId": 2652
+  },
+  {
+    "label": "Model and QB agree: #1 option, big gain",
+    "file": "plays\\play_2021103105_2438.json",
+    "gameId": 2021103105,
+    "playId": 2438
+  }
+]
