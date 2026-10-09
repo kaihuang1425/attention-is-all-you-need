@@ -1,4 +1,4 @@
-# Defensive Attention
+# Attention is all you need
 
 Defensive Attention is an interactive replay of recorded 2021 NFL passing plays, built from player tracking, play-by-play data, and clearly marked model estimates. It reveals estimated defensive attention, passing windows, and how the quarterback's actual target compares with the model's top pass option at release. Its core metric, Safety Pull, shows that against single-high coverage a receiver who drags the deep safety gives his targeted teammate +0.25 yards of separation and +4 points of completion rate, with no effect against two-high shells. Coaches, analysts, and broadcasters can use it to explain a play, then check whether its signals hold up across thousands of throws.
 
